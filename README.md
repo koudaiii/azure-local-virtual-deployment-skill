@@ -34,6 +34,17 @@ When invoked from AI, it walks you through the Azure Local lab build in **6 phas
 
 ## Installation
 
+### Option A — Claude App (claude.ai) custom skill
+
+Upload `azure-local-virtual-deployment.skill` (a ZIP containing `SKILL.md` + `references/`) as a custom skill:
+
+1. Open https://claude.ai/settings/capabilities
+2. Under **Skills**, choose **Upload skill** (custom skills)
+3. Select `azure-local-virtual-deployment.skill` from this repository
+4. The skill is registered automatically from the `SKILL.md` frontmatter — no restart needed
+
+### Option B — CLI tools (Claude Code / Copilot CLI / Codex)
+
 Copy the skill into your skills directory under `~/[.claude|.copilot|.codex]/skills/`.
 
 ```bash
