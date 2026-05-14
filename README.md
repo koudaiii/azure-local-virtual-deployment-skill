@@ -25,7 +25,7 @@ When invoked from AI, it walks you through the Azure Local lab build in **6 phas
 
 ## Prerequisites
 
-- An Azure VM with **nested virtualization enabled** (`Standard_E16s_v5` or larger recommended — needs >= 64 GB RAM and 16+ vCPUs)
+- An Azure VM with **nested virtualization enabled** (`Standard_E32-8s_v5` recommended — 8 vCPUs / 256 GiB RAM, constrained-core SKU that gives plenty of memory for the nested DC + Node VMs while keeping per-core licensing costs down)
 - **Owner**, or **Contributor + User Access Administrator**, on an Azure subscription
 - A **Windows Server 2022 or 2025 ISO** (for the Domain Controller VM)
 - An **Azure Stack HCI 24H2 ISO** (for the Node VM)
