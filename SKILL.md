@@ -115,3 +115,37 @@ To stop all Azure Local charges:
 3. Stop or delete the host Azure VM to stop compute charges.
 
 A more detailed cleanup procedure is in `references/troubleshooting.md` under "Cleanup".
+
+## Further reading — official Microsoft documentation
+
+This skill is built on top of (and corrects gaps in) the following Microsoft Learn pages. When the official docs change, these URLs remain the source of truth — consult them for the latest verified procedures.
+
+### Main deployment journey
+
+- **[Deploy Azure Local using virtual machines](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-virtual)** — the umbrella tutorial this skill mirrors. Covers Phases 1, 2, and parts of 5.
+- **[Azure Local deployment overview](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-introduction)** — bigger-picture context of where virtual deployment fits.
+
+### By phase
+
+| Phase | Official document |
+|---|---|
+| 3 (Azure prep) | [Register to Arc and assign permissions for deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-arc-register-server-permissions) |
+| 4 (Arc registration) | [Register your machines with Azure Arc](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway) |
+| 5 (AD setup) | [Prepare Active Directory environment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory) |
+| 6 (Cluster portal) | [Deploy Azure Local using Azure portal](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deploy-via-portal) |
+
+### Supporting topics
+
+- [Azure Local requirements](https://learn.microsoft.com/en-us/azure/azure-local/concepts/system-requirements) — hardware/software prerequisites
+- [Download Azure Local 23H2/24H2 software](https://learn.microsoft.com/en-us/azure/azure-local/deploy/download-23h2-software) — how to obtain the ISO
+- [Network ATC reference](https://learn.microsoft.com/en-us/azure/azure-local/concepts/network-atc-overview) — how Network ATC manages cluster networking after deployment
+- [Storage Spaces Direct overview](https://learn.microsoft.com/en-us/azure-stack/hci/concepts/storage-spaces-direct-overview) — S2D fundamentals
+- [Get support for deployment issues](https://learn.microsoft.com/en-us/azure/azure-local/manage/get-support-for-deployment-issues) — support escalation
+- [Azure Local pricing](https://azure.microsoft.com/pricing/details/azure-local/) — current cost model
+
+### Post-deployment
+
+- [Create VMs on Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/manage/create-arc-virtual-machines) — deploying workloads after cluster is up
+- [Enable AKS on Azure Local](https://learn.microsoft.com/en-us/azure/aks/aksarc/aks-overview) — Kubernetes on the cluster
+
+Each reference file under `references/` also lists the specific Microsoft Learn page it derives from at the top of the file.
