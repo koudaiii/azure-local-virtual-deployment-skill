@@ -74,6 +74,21 @@ Write-Host "Token length: $($ArmAccessToken.Length) chars"
 
 ⚠️ **The token expires in ~1 hour.** Run Step 3 within an hour of generating the token. If the bootstrap fails due to expired token, regenerate.
 
+> **Token tenant binding** — applies to both plans, especially Plan B. The token is issued by **whichever tenant you signed into in Phase 3**.
+>
+> - **Plan A (same tenant)**: token tenant equals the only tenant you have. Confirm it matches your expected subscription, then proceed.
+> - **Plan B (cross-tenant)**: token tenant must be **Tenant B** (the registration tenant), **not** the host VM's home tenant (Tenant A). The cluster will be created wherever the token belongs.
+>
+> Always sanity-check before running Step 3:
+>
+> ```powershell
+> $ctx = Get-AzContext
+> Write-Host "Token tenant: $($ctx.Tenant.Id)        ←  Plan A: your tenant.  Plan B: Tenant B."
+> Write-Host "Token sub:    $($ctx.Subscription.Id)"
+> ```
+>
+> If the token tenant is wrong (Plan B users: it landed in Tenant A by mistake), re-run `Connect-AzAccount -TenantId <registration-tenant-guid>` before regenerating the token. See `references/03-azure-prep.md` § "Choose your tenant strategy" for the Plan A / Plan B comparison.
+
 ## Step 3: Run the bootstrap on Node1
 
 ```powershell

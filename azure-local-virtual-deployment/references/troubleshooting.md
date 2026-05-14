@@ -185,6 +185,57 @@ Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
 
 ## Phase 3: Azure Prep
 
+### `Connect-AzAccount` blocked by Conditional Access
+
+**Symptoms** (any of):
+
+- The browser auth page returns `AADSTS530003` / `AADSTS530004` / `AADSTS50158` / `AADSTS50199` / "Your sign-in was successful but does not meet the criteria to access this resource" / "You can't get there from here".
+- Device-code flow accepts the code but then bounces back to a "device must be compliant / hybrid joined" page.
+- `Connect-AzAccount` returns immediately with `AADSTS50005` (sign-in blocked by tenant policy) or `AADSTS50097` (device authentication required).
+- A pop-up demands a managed-device certificate that the host Azure VM does not have.
+
+**Cause**: The Entra tenant whose user account you are trying to sign in as enforces Conditional Access (CA) — device compliance, hybrid Entra join, named-location, sign-in risk, etc. — and the **host Azure VM does not satisfy those conditions**. This is the default state for tightly-managed enterprise tenants (including many Microsoft engineer accounts) and increasingly common for enterprise customers in general.
+
+**Fix — switch from Plan A to Plan B.** The host VM tenant and the cluster registration tenant are independent (see `references/03-azure-prep.md` § "Choose your tenant strategy"). Sign in to a separate tenant (Tenant B) whose CA permits sign-in from an arbitrary Azure VM IP:
+
+```powershell
+# Example: register the cluster to an MSDN / Visual Studio Enterprise / partner /
+# personal dev tenant instead of your primary work tenant.
+Connect-AzAccount -TenantId "<registration-tenant-guid>"
+
+# Confirm which tenant you actually landed in
+$ctx = Get-AzContext
+Write-Host "Tenant:       $($ctx.Tenant.Id)"
+Write-Host "Subscription: $($ctx.Subscription.Id)"
+Write-Host "Account:      $($ctx.Account.Id)"
+```
+
+The `$tenantId` / `$subscriptionId` you capture from this context flow straight into Phase 4's `Invoke-AzStackHciArcInitialization` — the cluster will be registered into this tenant, not the host VM's tenant.
+
+**If you must use the original tenant (for billing / compliance reasons)**, ask the tenant administrator to do one of the following before retrying:
+
+1. Add the host Azure VM's outbound public IP to a **trusted Named Location** and exempt it for the Azure Local engineer group.
+2. Provide a **break-glass / unconditional** account scoped to the lab subscription.
+3. Sign you in from a compliant device, then run `Connect-AzAccount -UseDeviceAuthentication` from the host and complete the code on the compliant device (works for tenants that gate on device state but not on IP).
+
+**Guidance for engineers in tightly-managed work tenants** (including many Microsoft engineers): Plan B is the supported pattern when Plan A is impossible. Keep the host VM in your primary work subscription (Tenant A) but register the cluster into an MSDN / Visual Studio Enterprise / partner / personal-dev tenant (Tenant B). Document this split tenancy in your lab paperwork — it is the expected configuration for this scenario, not a workaround. Cost split between the two subscriptions (including the **60-day free trial** of the Azure Local service fee on the Tenant B side) is detailed in `references/03-azure-prep.md` § "Cost split between the two tenants".
+
+### `Connect-AzAccount` succeeds but lands in the wrong tenant
+
+**Cause**: Your account is a guest or member in multiple tenants. `Connect-AzAccount` without `-TenantId` defaults to the account's **home tenant**, which is often *not* the registration tenant you wanted.
+
+**Fix**: Always pass `-TenantId` explicitly when doing Plan B (cross-tenant) registration:
+
+```powershell
+Disconnect-AzAccount
+Connect-AzAccount -TenantId "<registration-tenant-guid>"
+
+# Then verify before continuing to Step 2 of Phase 3:
+Get-AzContext | Format-List Account, Tenant, Subscription
+```
+
+If the subscription list is still empty after sign-in, run `Get-AzSubscription -TenantId "<registration-tenant-guid>"` and `Set-AzContext -SubscriptionId "<sub-guid>"` to pick one explicitly.
+
 ### `Register-AzResourceProvider` stuck at `Registering`
 
 **Cause**: Normal — registration is asynchronous and takes 1-5 minutes per provider.

@@ -26,6 +26,12 @@ Before starting, confirm:
 - **At least 3-4 hours** of available time for the full walkthrough
 - The user understands this will incur **Azure costs** (Azure VM hosting + Azure Local service fee after 60-day trial)
 
+> **Two supported tenant plans — pick one in Phase 3.**
+> - **Plan A (default)** — the host Azure VM and the Azure Local cluster both live in the same Entra ID tenant. Use this whenever you can. The Microsoft Learn tutorial implicitly assumes this plan.
+> - **Plan B (cross-tenant)** — the host Azure VM lives in your primary work tenant (Tenant A) but the cluster is **registered into a different tenant** (Tenant B — e.g., MSDN / Visual Studio Enterprise / partner / personal dev). Choose this when Tenant A's Conditional Access blocks `Connect-AzAccount` / device-code flow from arbitrary VMs, or when you lack `Owner` / billing rights there. Common for engineers in tightly-managed enterprise tenants (including many Microsoft engineers).
+>
+> The two plans share every command in this skill; only the `Connect-AzAccount` call in Phase 3 differs. The **60-day free trial** of the Azure Local service fee applies to whichever tenant the cluster is registered in. Full plan comparison and the cross-tenant cost-split table are in `references/03-azure-prep.md` § "Choose your tenant strategy"; CA-blocked sign-in workarounds are in `references/troubleshooting.md` § "`Connect-AzAccount` blocked by Conditional Access".
+
 ## High-level phase map
 
 This deployment has 5 phases. Each has a dedicated reference file with detailed commands.
@@ -74,6 +80,12 @@ These are the **non-negotiable rules** that prevent the most common failures:
 
 ### vSwitch creation
 - For an **External** switch, do **NOT** pass `-SwitchType External`. Use only `-NetAdapterName <NIC>`. The `-SwitchType` parameter only accepts `Internal` or `Private`.
+
+### Tenant / subscription strategy (Plan A vs Plan B)
+- **Plan A — same tenant (default).** Host Azure VM and the Azure Local cluster both live in one tenant. Sign in with `Connect-AzAccount` (no `-TenantId`) in Phase 3. Choose this whenever it works.
+- **Plan B — cross-tenant.** Host VM in Tenant A, cluster registered in Tenant B. The two tenants are independent: the bootstrap only needs egress to the public Azure control plane endpoints (`login.microsoftonline.com`, `management.azure.com`, `*.arc.azure.com`, …) and requires **no** trust / federation between the tenants. Sign in with `Connect-AzAccount -TenantId <Tenant-B-guid>` in Phase 3 — the `$tenantId` / `$subscriptionId` captured there flow straight into the Phase 4 Arc bootstrap, so the cluster lands in Tenant B regardless of where the host VM lives.
+- **When to fall back from A to B.** Use Plan B if Tenant A's Conditional Access blocks `Connect-AzAccount` from the host VM (device-compliance, sign-in risk, named-location, etc.), if you lack `Owner` / `Contributor + User Access Administrator` in Tenant A, or if you need billing isolation. This is the typical configuration for engineers in tightly-managed enterprise tenants — Microsoft engineers in particular often must use Plan B because corporate CA prevents Plan A.
+- **Cost implication of Plan B.** Host VM compute + disks bill against Tenant A's subscription; the Azure Local cluster + Key Vault + storage accounts bill against Tenant B's subscription. The **60-day free trial** of the Azure Local service fee always applies to whichever subscription holds the cluster resource. Full per-subscription cost breakdown is in `references/03-azure-prep.md` § "Cost split between the two tenants".
 
 ## Workflow: how to drive this skill
 
