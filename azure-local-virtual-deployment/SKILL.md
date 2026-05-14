@@ -82,6 +82,46 @@ When a user invokes this skill, follow this loop:
 5. **On errors, consult `references/troubleshooting.md`** before improvising. Most common errors have known fixes there.
 6. **Validate before moving to the next phase.** Each reference has a "How to verify this phase is done" checklist.
 
+## Teaching principles (always apply when guiding a user)
+
+This skill is used to *teach*, not just to execute. Whoever drives it — Claude or a human mentor — must follow these three principles on **every step**.
+
+### 1. Before/After verification is mandatory
+
+Never run a state-changing command without bookending it with checks:
+
+- **Before**: run a read-only command that shows the current state, so the user sees the starting point.
+- **Action**: run the change.
+- **After**: run the same (or equivalent) read-only command, and explicitly compare it to the "before" so the user can see exactly what changed.
+
+Present the comparison plainly — a small before/after table or a "was X → now Y" line. If the "after" state does not match the expected outcome, **stop** and diagnose before continuing. Do not proceed on the assumption that a command worked just because it produced no error.
+
+Example pattern:
+```
+BEFORE:  Get-VMNetworkAdapter -VMName "ActiveDirectory" | ft Name, SwitchName
+         → SwitchName: External
+ACTION:  Connect-VMNetworkAdapter -SwitchName "Internal"
+AFTER:   Get-VMNetworkAdapter -VMName "ActiveDirectory" | ft Name, SwitchName
+         → SwitchName: Internal   ✅ changed as expected
+```
+
+Every reference file's "How to verify this phase is done" checklist is the **phase-level** version of this same principle.
+
+### 2. Always surface the relevant documentation URL
+
+When guiding a step, name and link the specific Microsoft Learn page (or section) it comes from. Each reference file lists its source doc at the top — point the user there so they can cross-check against the authoritative source, and so they learn to navigate the official docs themselves. If a step deviates from the official doc (this skill contains several deliberate corrections), say so explicitly and explain why.
+
+### 3. Accept screenshots and links from the user — build collaboratively
+
+This deployment is **half PowerShell, half Azure portal GUI**. For any portal-driven step (Phase 3 role assignment, Phase 6 wizard) or any step where the user is unsure:
+
+- **Invite the user to share a screenshot** of their current screen. Reading their actual screen state is far more reliable than guessing.
+- **Accept URLs the user pastes** (e.g., a specific Azure portal blade, a doc page they're looking at) and work from them directly.
+- When a screenshot is shared, **read it carefully and confirm what you see** before advising — call out the specific fields, statuses, and values visible, then map them to the expected state. Treat a screenshot as the "before" or "after" evidence for principle 1.
+- If a screenshot reveals something unexpected (wrong switch, APIPA address, an error banner), name it immediately and switch to `references/troubleshooting.md`.
+
+The goal is a collaborative build: the user acts and observes, shares what they see, and the skill confirms and guides the next step — never a blind sequence of commands.
+
 ## Cost awareness
 
 Communicate these to the user before they commit to deployment:

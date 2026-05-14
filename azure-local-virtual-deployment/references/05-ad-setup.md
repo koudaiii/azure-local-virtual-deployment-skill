@@ -3,6 +3,8 @@
 > **Source documentation**: Microsoft Learn — [Prepare Active Directory environment for Azure Local deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory).
 >
 > The official doc assumes an existing AD domain. This skill adds Part A (building a Domain Controller VM from scratch on the Internal switch) since lab environments rarely have a pre-existing domain.
+>
+> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. This phase has the most before/after-critical steps in the whole skill (switch swap, static IP, DNS repoint) — bookend every one of them with checks.
 
 Azure Local **requires an Active Directory domain** for the cluster, even in a lab. This phase creates a Domain Controller VM, sets up DNS, and pre-creates the OU and LCM (Lifecycle Manager) user that the cluster deployment will use.
 

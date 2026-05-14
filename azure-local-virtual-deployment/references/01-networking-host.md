@@ -3,6 +3,8 @@
 > **Source documentation**: Microsoft Learn — [Deploy Azure Local using virtual machines](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-virtual), sections "Set up an external virtual switch" and "Deploy with internal virtual switch and NAT enabled".
 >
 > The procedure below corrects a known issue in the public doc (the `-SwitchType External` parameter error) and adds explicit verification steps.
+>
+> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. Never run a state-changing command without a before-check and an after-check.
 
 This phase prepares the **Hyper-V virtual switches** on the host Azure VM. Two switches are needed: one for the host's own internet access, and one (with NAT) for the cluster VMs.
 

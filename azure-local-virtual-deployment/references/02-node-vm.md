@@ -5,6 +5,8 @@
 > - [Download Azure Local software (ISO)](https://learn.microsoft.com/en-us/azure/azure-local/deploy/download-23h2-software) — where to get the OS image.
 >
 > The procedure below adds VHDX disk-distribution strategy, MAC-based NIC renaming using captured variables, and explicit DNS bootstrapping (which is changed again in Phase 5).
+>
+> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source docs above, (3) accept screenshots and links the user shares. Never run a state-changing command without a before-check and an after-check.
 
 This is the longest phase. You create the Node VM, install Azure Stack HCI OS, rename network adapters by MAC address, set a static IP, and enable the Hyper-V role.
 

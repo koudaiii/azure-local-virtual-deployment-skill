@@ -3,6 +3,8 @@
 > **Source documentation**: Microsoft Learn — [Register to Arc and assign permissions for deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-arc-register-server-permissions).
 >
 > The procedure below captures the 13 required resource providers and the 6 role assignments (2 subscription-level + 4 resource-group-level) in a single PowerShell flow.
+>
+> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. The role-assignment steps are GUI-driven — actively invite the user to share Azure portal screenshots so you can confirm each assignment landed.
 
 This phase is **entirely on the host's PowerShell** (no Node interaction). You register the 13 required resource providers, create the resource group, and assign roles needed for cluster deployment.
 
