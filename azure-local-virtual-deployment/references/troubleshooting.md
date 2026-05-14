@@ -1,5 +1,10 @@
 # Troubleshooting: Common Errors and Fixes
 
+> **Related Microsoft documentation**:
+> - [Get support for deployment issues](https://learn.microsoft.com/en-us/azure/azure-local/manage/get-support-for-deployment-issues) — official support escalation path and log collection
+> - [Troubleshoot Azure Local deployment](https://learn.microsoft.com/en-us/azure/azure-local/manage/troubleshoot-deployment-issues) — known issues from Microsoft
+> - [Azure Local known issues](https://learn.microsoft.com/en-us/azure/azure-local/known-issues) — current release-specific issues
+
 This is the place to look when something goes wrong. Errors are grouped by phase.
 
 ## Phase 1: Host Networking

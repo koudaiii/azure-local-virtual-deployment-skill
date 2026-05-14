@@ -1,5 +1,11 @@
 # Phase 6: Cluster Deployment via Azure Portal
 
+> **Source documentation**: Microsoft Learn — [Deploy Azure Local using Azure portal](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deploy-via-portal).
+>
+> Related: [Network reference patterns for Azure Local](https://learn.microsoft.com/en-us/azure/azure-local/plan/cluster-deployment-network-considerations) explains the different "Group all/some traffic" intent patterns referenced in Tab 3.
+>
+> The procedure below adds the specific values that work for the IP plan established in this skill (192.168.44.0/24) and flags fields most likely to trip up first-time users.
+
 The final phase: run the Azure portal's "Deploy Azure Local" wizard, validate, and trigger the actual cluster build. This phase has an **8-tab wizard** followed by a **2-hour automated deployment**.
 
 ## Before you start

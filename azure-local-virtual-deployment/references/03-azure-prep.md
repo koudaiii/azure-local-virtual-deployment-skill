@@ -1,5 +1,9 @@
 # Phase 3: Azure-Side Preparation
 
+> **Source documentation**: Microsoft Learn — [Register to Arc and assign permissions for deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-arc-register-server-permissions).
+>
+> The procedure below captures the 13 required resource providers and the 6 role assignments (2 subscription-level + 4 resource-group-level) in a single PowerShell flow.
+
 This phase is **entirely on the host's PowerShell** (no Node interaction). You register the 13 required resource providers, create the resource group, and assign roles needed for cluster deployment.
 
 ## What you set up

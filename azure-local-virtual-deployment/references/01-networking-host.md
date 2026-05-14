@@ -1,5 +1,9 @@
 # Phase 1: Host Networking (External Switch + Internal Switch + NAT)
 
+> **Source documentation**: Microsoft Learn — [Deploy Azure Local using virtual machines](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-virtual), sections "Set up an external virtual switch" and "Deploy with internal virtual switch and NAT enabled".
+>
+> The procedure below corrects a known issue in the public doc (the `-SwitchType External` parameter error) and adds explicit verification steps.
+
 This phase prepares the **Hyper-V virtual switches** on the host Azure VM. Two switches are needed: one for the host's own internet access, and one (with NAT) for the cluster VMs.
 
 ## What you build

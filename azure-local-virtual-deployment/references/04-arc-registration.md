@@ -1,5 +1,9 @@
 # Phase 4: Register Node with Azure Arc
 
+> **Source documentation**: Microsoft Learn — [Register your Azure Local machines with Azure Arc (without Azure Arc gateway)](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-without-azure-arc-gateway).
+>
+> Multiple variants exist in the doc based on proxy/gateway combinations. This skill uses the **without-proxy, without-Arc-gateway, ARM-token** variant — the cleanest path for a nested-VM lab where the host is already signed into Azure.
+
 This phase runs the **Azure Local bootstrap** on Node1 to register it as an Arc-enabled machine. After this, Azure can see the Node and you can run the cluster deployment wizard.
 
 ## What you set up

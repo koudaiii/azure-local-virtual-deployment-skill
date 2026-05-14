@@ -1,5 +1,11 @@
 # Phase 2: Node VM Creation + Azure Stack HCI OS Setup
 
+> **Source documentation**:
+> - Microsoft Learn — [Deploy Azure Local using virtual machines](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-virtual), sections "Create the virtual host" and "Install the OS on the virtual host VMs".
+> - [Download Azure Local software (ISO)](https://learn.microsoft.com/en-us/azure/azure-local/deploy/download-23h2-software) — where to get the OS image.
+>
+> The procedure below adds VHDX disk-distribution strategy, MAC-based NIC renaming using captured variables, and explicit DNS bootstrapping (which is changed again in Phase 5).
+
 This is the longest phase. You create the Node VM, install Azure Stack HCI OS, rename network adapters by MAC address, set a static IP, and enable the Hyper-V role.
 
 ## What you build

@@ -1,5 +1,9 @@
 # Phase 5: Active Directory Setup (DC VM + OU + LCM User)
 
+> **Source documentation**: Microsoft Learn — [Prepare Active Directory environment for Azure Local deployment](https://learn.microsoft.com/en-us/azure/azure-local/deploy/deployment-prep-active-directory).
+>
+> The official doc assumes an existing AD domain. This skill adds Part A (building a Domain Controller VM from scratch on the Internal switch) since lab environments rarely have a pre-existing domain.
+
 Azure Local **requires an Active Directory domain** for the cluster, even in a lab. This phase creates a Domain Controller VM, sets up DNS, and pre-creates the OU and LCM (Lifecycle Manager) user that the cluster deployment will use.
 
 ## What you build
