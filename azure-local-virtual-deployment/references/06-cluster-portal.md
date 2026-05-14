@@ -6,7 +6,35 @@
 >
 > The procedure below adds the specific values that work for the IP plan established in this skill (192.168.44.0/24) and flags fields most likely to trip up first-time users.
 >
-> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. This phase is almost entirely GUI — **expect a screenshot for every tab** and confirm the visible field values against the expected values before telling the user to click Next.
+> **Teaching reminder**: Apply the four teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares, (4) state which layer/credential each command runs as and preview any dialog before it appears. See `references/00-accounts-and-context.md`. This phase is almost entirely GUI — **expect a screenshot for every tab** and confirm the visible field values against the expected values before telling the user to click Next.
+
+> **Context for this entire phase**: `[Azure portal — signed in as your Azure user]`. The PowerShell snippets at the bottom of the file run on `[Host PowerShell → Node1 via $cred]`.
+>
+> ⚠ **Two passwords appear in Tab 4 and they are different.** Mixing them up causes the most common Phase 6 validation failure:
+> - **Deployment account** → username `lcmuser`, password from `$lcmCred` (Phase 5 Step C2). Domain user.
+> - **Local administrator** → username `Administrator`, password from `$cred` (Phase 2 Step 7). Local Node1 user.
+
+## Wizard shape at a glance
+
+The "Deploy Azure Local" wizard is an 8-tab linear flow. Knowing the shape ahead of time helps avoid the "where am I?" feeling on the 5th screen:
+
+```
+┌─ Deploy Azure Local ───────────────────────────────────────────────┐
+│                                                                    │
+│  ① Basics    ─→  Subscription, RG, name, ID provider, machines     │
+│  ② Configuration ─→  New vs reuse (pick New)                       │
+│  ③ Networking ⚠ ─→  Storage switch / pattern / NICs / IP plan      │
+│  ④ Management   ─→  Domain, OU, lcmuser pwd, local Admin pwd       │
+│  ⑤ Security     ─→  Recommended defaults                           │
+│  ⑥ Advanced     ─→  Volume layout                                  │
+│  ⑦ Tags         ─→  Optional                                       │
+│  ⑧ Validation   ─→  ~15 min auto checks before deployment          │
+│                                                                    │
+│  [ < Previous ]                                  [   Next >   ]    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+The wizard tracks unsaved progress in your browser — closing the tab usually loses input, so allocate one uninterrupted sitting (~30 min) to fill it.
 
 The final phase: run the Azure portal's "Deploy Azure Local" wizard, validate, and trigger the actual cluster build. This phase has an **8-tab wizard** followed by a **2-hour automated deployment**.
 
@@ -107,16 +135,49 @@ Click **Validate subnet** — should show a green checkmark.
 
 ## Tab 4: Management
 
-| Field | Value |
-|---|---|
-| Custom location name | `azlocal-location` (or any name) |
-| Witness | **No witness** (single-node) or create a new storage account |
-| Domain | **azurelocal.com** |
-| OU | **OU=AzureLocal,DC=azurelocal,DC=com** |
-| Deployment account: User name | **lcmuser** (no domain prefix!) |
-| Deployment account: Password | LCM user password (14+ chars) |
-| Local administrator: User name | **Administrator** |
-| Local administrator: Password | Node1's local Administrator password from Phase 2 |
+The form has two credential sections side-by-side. They look almost identical and **they are different accounts** — confusing them is the #1 cause of "validation passed but deployment fails at domain-join":
+
+```
+┌─ Management ───────────────────────────────────────────────────────┐
+│                                                                    │
+│ Custom location name:  [ azlocal-location                    ]     │
+│ Witness:               ( ) No witness                              │
+│                        ( ) Cloud witness — create storage account  │
+│                                                                    │
+│ ── Domain ─────────────────────────────────────────────────────    │
+│ Domain (FQDN):         [ azurelocal.com                       ]    │
+│ OU path:               [ OU=AzureLocal,DC=azurelocal,DC=com   ]    │
+│                                                                    │
+│ ── Deployment account ── (the AD domain user that joins Node) ──   │
+│ User name:             [ lcmuser                              ]    │
+│ Password:              [ ********************                 ]    │
+│ Confirm password:      [ ********************                 ]    │
+│   → Type the exact password you set on $lcmCred in Phase 5 C2.     │
+│   → User name has NO domain prefix.                                │
+│                                                                    │
+│ ── Local administrator account ── (Node1's local Administrator) ── │
+│ User name:             [ Administrator                        ]    │
+│ Password:              [ ********************                 ]    │
+│ Confirm password:      [ ********************                 ]    │
+│   → Type the exact password you set in Phase 2 Step 7              │
+│     (the same one captured into $cred).                            │
+│                                                                    │
+│                                       [ < Previous ] [ Next > ]    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+Reference table for what each field expects:
+
+| Field | Value | Source |
+|---|---|---|
+| Custom location name | `azlocal-location` (or any name) | new |
+| Witness | **No witness** (single-node) or create a new storage account | new |
+| Domain | **azurelocal.com** | Phase 5 A3 |
+| OU | **OU=AzureLocal,DC=azurelocal,DC=com** | Phase 5 C2 |
+| Deployment account: User name | **lcmuser** (no domain prefix!) | Phase 5 C2 / `$lcmCred` |
+| Deployment account: Password | LCM user password (14+ chars) | Phase 5 C2 / `$lcmCred` |
+| Local administrator: User name | **Administrator** | Phase 2 Step 7 |
+| Local administrator: Password | Node1's local Administrator password | Phase 2 Step 7 / `$cred` |
 
 ### Common errors here
 
@@ -150,6 +211,23 @@ Optional. Skip (or add `Environment=Lab`).
 ## Tab 8: Validation
 
 Click **Start validation**. Pre-validation resources are created (system resources, Key Vault audit log, etc.), then the actual validation runs (~15 minutes).
+
+The screen looks roughly like this while running:
+
+```
+┌─ Validation ────────────────────────────────────────────────────────┐
+│ Start validation                                                    │
+│                                                                     │
+│ ▼ PrepareEnvironment           ●  Succeeded         (00:01:12)      │
+│ ▼ BootstrapEnvironment         ●  Succeeded         (00:00:48)      │
+│ ▶ Download content for         ◐  Running …         (00:08:30) ←    │
+│   deployment                                          largest step  │
+│ ▶ InvokeEnvironmentChecker     ○  Not started                       │
+│                                                                     │
+│  Refreshing every 30 seconds. You can close this tab and return     │
+│  via Resource group → azlocal-cluster → Deployments.                │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 Sub-tasks include:
 - PrepareEnvironment
@@ -218,6 +296,8 @@ In the resource group, expect:
 | **Azure Local storage path** | 1+ | Per workload volume |
 
 ## Verify cluster health from Node1
+
+`[Host PowerShell → Node1 via $cred]` — note that `$cred` may need to be regenerated using the renamed admin account (see warning below).
 
 ```powershell
 Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {

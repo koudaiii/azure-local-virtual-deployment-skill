@@ -6,9 +6,35 @@
 >
 > The procedure below adds VHDX disk-distribution strategy, MAC-based NIC renaming using captured variables, and explicit DNS bootstrapping (which is changed again in Phase 5).
 >
-> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source docs above, (3) accept screenshots and links the user shares. Never run a state-changing command without a before-check and an after-check.
+> **Teaching reminder**: Apply the four teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source docs above, (3) accept screenshots and links the user shares, (4) state which layer/credential each command runs as and preview any dialog before it appears. See `references/00-accounts-and-context.md`.
+
+> **Context shifts in this phase** — read this once before starting:
+>
+> | Steps | Where you act |
+> |---|---|
+> | 1–6 (VM creation) | `[Host PowerShell — azureuser]` |
+> | 7 (OS install) | `[Inside Node1 console]` via `vmconnect.exe` window |
+> | 8 (capture `$cred`) | `[Host PowerShell — azureuser]` — `Get-Credential` dialog appears |
+> | 9–12 (NIC rename, IP, Hyper-V) | `[Host PowerShell → Node1 via $cred]` |
+>
+> Each command block below begins with its badge so you can scan for shifts.
 
 This is the longest phase. You create the Node VM, install Azure Stack HCI OS, rename network adapters by MAC address, set a static IP, and enable the Hyper-V role.
+
+### Why Generation 2 + Secure Boot + vTPM are mandatory (not optional)
+
+Azure Stack HCI / Azure Local requires UEFI firmware, Secure Boot, and a TPM 2.0 for the OS to install and for BitLocker to engage during cluster deployment. In a nested Hyper-V VM these requirements map to:
+
+| Azure Local requirement | Hyper-V VM setting | Why |
+|---|---|---|
+| UEFI firmware | **Generation 2** | Gen 1 VMs only emulate BIOS; Gen 2 emulates UEFI. There is no way to retrofit a Gen 1 VM. |
+| Secure Boot | Gen 2 default (enabled) | Required for the HCI installer to accept the disk and for Secure Boot validation chain. |
+| TPM 2.0 | **vTPM** (Step 4) | Cluster deployment uses BitLocker; BitLocker requires a TPM. vTPM only exists on Gen 2 VMs. |
+| Nested virt | `ExposeVirtualizationExtensions $true` (Step 2) | Node1 itself runs Hyper-V to host the cluster's infra VMs. |
+
+So the chain is: **Azure Local needs BitLocker → BitLocker needs TPM → TPM means vTPM → vTPM means Gen 2 → therefore everything in this phase is Gen 2.** This is not a "best practice", it is a hard prerequisite — Gen 1 fails at the installer screen.
+
+> **Lab caveat**: vTPM in this lab is backed by `UntrustedGuardian` with `-AllowUntrustedRoot` (Step 4). That is deliberately a *weakened* trust posture suitable only for a lab — in production you would tie the guardian to a real HGS attestation service. We accept the weaker posture because the alternative (deploying HGS) is out of scope for a learning environment.
 
 ## What you build
 
@@ -58,6 +84,8 @@ New-VM -Name "Node1" `
 
 ## Step 2: VM tuning
 
+`[Host PowerShell — azureuser]`
+
 ```powershell
 # Disable dynamic memory (Azure Local wants static)
 Set-VMMemory -VMName "Node1" -DynamicMemoryEnabled $false
@@ -74,6 +102,18 @@ Set-VMProcessor -VMName "Node1" -ExposeVirtualizationExtensions $true
 # Disable time sync (the cluster manages its own time)
 Disable-VMIntegrationService -VMName "Node1" -Name "Time Synchronization"
 ```
+
+### Why we *disable* checkpoints here (against Hyper-V's general advice)
+
+Generic Hyper-V guidance recommends **Production checkpoints** for any production VM, so disabling checkpoints entirely on Node1 looks wrong at first glance. It is correct for this specific case because Node1 is going to be a **Storage Spaces Direct (S2D) cluster node**, and S2D is fundamentally incompatible with Hyper-V checkpoints:
+
+- A checkpoint freezes the VM's disk state at a point in time, but S2D is a distributed storage layer that expects its physical disks to keep moving forward consistently with the cluster. Reverting a node to a checkpoint puts its S2D metadata out of sync with the rest of the cluster, which the cluster cannot recover from.
+- Microsoft's Azure Local deployment validator explicitly checks `CheckpointType` on the host VM that will become a node — leaving the default Production value will cause validation warnings.
+- Automatic checkpoints (introduced in Windows 10 / Server 2019) are even worse because they trigger silently on every VM start.
+
+So the rule is: **for *normal* Hyper-V VMs, keep Production checkpoints on. For VMs that will become Azure Local / S2D nodes, set `-CheckpointType Disabled`.** This applies only to Node1 in our lab — the DC VM (Phase 5) keeps default checkpoint behavior because it is not part of the storage cluster.
+
+If you ever need a "save point" for Node1 during the lab, **stop the VM and copy the VHDX files** instead — that gives you a real snapshot that does not break S2D.
 
 ## Step 3: Network adapters (4 NICs)
 
@@ -122,6 +162,8 @@ Add-VMHardDiskDrive -VMName "Node1" -Path "G:\DCVM\Node1\s2d2.vhdx"
 
 ## Step 6: Mount the ISO and boot
 
+`[Host PowerShell — azureuser]`
+
 ```powershell
 $isoPath = "C:\Users\azureuser\Downloads\AzureStackHCI.iso"  # Adjust to your path
 
@@ -138,7 +180,26 @@ Start-VM -Name "Node1"
 vmconnect.exe localhost Node1
 ```
 
+The last line opens a **separate window** — the Hyper-V virtual machine console. From this point your keystrokes go into Node1, not the host:
+
+```
+┌─ Node1 on AZLOCAL - Virtual Machine Connection ──────────[_][□][×]┐
+│ File  Action  Media  Clipboard  View  Help                        │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│                                                                   │
+│           Loading files...                                        │
+│           Windows is starting up                                  │
+│                                                                   │
+│                                                                   │
+├───────────────────────────────────────────────────────────────────┤
+│ Status: Running                                                   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
 ## Step 7: OS installation (manual via console)
+
+`[Inside Node1 console]` — all interaction in this step happens in the vmconnect window opened in Step 6.
 
 In the VM console:
 
@@ -149,24 +210,94 @@ In the VM console:
 5. **Choose the 127 GB disk** (do NOT pick the 1024 GB s2d disks)
 6. Wait ~10-20 min for install (multiple auto-reboots)
 7. At first boot, set the **Administrator password** (14+ chars, all 4 character classes)
-8. SConfig will start. Press `15` → exit to command line
+
+   ```
+   ┌─ Node1 console ─────────────────────────────────────────────────┐
+   │ The user's password must be changed before signing in.          │
+   │                                                                 │
+   │ New password:    [ ********************            ]            │
+   │ Confirm pwd:     [ ********************            ]            │
+   │                                                                 │
+   │ → 14+ chars, must include upper + lower + digit + special.      │
+   │   Write this password down — captured into $cred in Step 8      │
+   │   and re-used as the "Local administrator" in Phase 6 Tab 4.    │
+   └─────────────────────────────────────────────────────────────────┘
+   ```
+
+8. SConfig will start. The screen looks like this:
+
+   ```
+   ┌─ Node1 console — SConfig ──────────────────────────────────────┐
+   │ Server Configuration                                            │
+   │                                                                 │
+   │  1) Domain/Workgroup:        Workgroup: WORKGROUP               │
+   │  2) Computer name:           WIN-XXXXXXXXXXX                    │
+   │  3) Add local administrator                                     │
+   │  4) Configure remote management                                 │
+   │  5) Windows Update settings                                     │
+   │  6) Install updates                                             │
+   │  7) Remote desktop                                              │
+   │  8) Network settings                                            │
+   │  9) Date and time                                               │
+   │ 10) Telemetry settings                                          │
+   │ 11) Windows activation                                          │
+   │ 12) Log off user                                                │
+   │ 13) Restart server                                              │
+   │ 14) Shut down server                                            │
+   │ 15) Exit to command line (PowerShell)                           │
+   │                                                                 │
+   │ Enter number to select an option: _                             │
+   └─────────────────────────────────────────────────────────────────┘
+   ```
+
+   Press `15` → exit to command line.
 9. Restart SConfig: type `SConfig` and press Enter
-10. Press `2` → set computer name to `Node1` → confirm restart
+10. Press `2` → at the "Enter new computer name" prompt type `Node1` → confirm restart. The VM reboots; SConfig will reappear after login as `Node1`.
 
 ## Step 8: From host, connect via PowerShell Direct
+
+`[Host PowerShell — azureuser]` — switch back to the host's own PowerShell window (the one from Steps 1–6, **not** the vmconnect console).
 
 After Node1 reboots and SConfig is up again:
 
 ```powershell
-# On host
-$cred = Get-Credential  # User: Administrator, Password: what you set in step 7
+$cred = Get-Credential
+```
 
+Running this opens a credential dialog on the host:
+
+```
+┌─ Windows PowerShell credential request ─────────────────────────┐
+│                                                                 │
+│ Enter your credentials.                                         │
+│                                                                 │
+│ User name:  [ Administrator                          ]   ▼     │
+│ Password:   [ ********************                   ]         │
+│                                                                 │
+│                                       [   OK   ]  [ Cancel ]    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- **User name**: just `Administrator` (no domain prefix — Node1 is NOT domain-joined yet; that happens automatically in Phase 6).
+- **Password**: the one you set in Step 7.
+
+After the dialog closes, confirm `$cred` holds the expected account before continuing:
+
+```powershell
+$cred.UserName     # → Administrator
+```
+
+```powershell
 # Test connection
 Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock { hostname }
 # Expected: Node1
 ```
 
+If the test returns a credential error, see `references/00-accounts-and-context.md` § "What to do when a credential is rejected".
+
 ## Step 9: Capture MAC addresses and rename NICs
+
+`[Host PowerShell — azureuser]` for the MAC capture, then `[Host PowerShell → Node1 via $cred]` for the rename inside the VM.
 
 The 4 NICs inside Node1 are named `Ethernet`, `Ethernet 2`, etc. We rename them to `NIC1-NIC4` matching the Hyper-V names by MAC address:
 
@@ -202,6 +333,8 @@ Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
 
 ## Step 10: Disable DHCP on all NICs
 
+`[Host PowerShell → Node1 via $cred]`
+
 ```powershell
 1..4 | ForEach-Object {
     Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
@@ -212,6 +345,8 @@ Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
 ```
 
 ## Step 11: Set NIC1 static IP (initial, will be updated in Phase 5)
+
+`[Host PowerShell → Node1 via $cred]`
 
 ```powershell
 Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
@@ -231,6 +366,8 @@ Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
 ```
 
 ## Step 12: Enable Hyper-V role inside Node1
+
+`[Host PowerShell → Node1 via $cred]`
 
 ```powershell
 Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {

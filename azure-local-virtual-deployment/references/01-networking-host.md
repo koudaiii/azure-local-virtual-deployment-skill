@@ -4,7 +4,9 @@
 >
 > The procedure below corrects a known issue in the public doc (the `-SwitchType External` parameter error) and adds explicit verification steps.
 >
-> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. Never run a state-changing command without a before-check and an after-check.
+> **Teaching reminder**: Apply the four teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares, (4) state which layer/credential each command runs as and preview any dialog before it appears. See `references/00-accounts-and-context.md` for the layer badges and credential map.
+
+> **Context for this entire phase**: `[Host PowerShell — azureuser]`. Every command in this file runs in the **host Azure VM's own PowerShell window**, signed in as `azureuser` over RDP. No nested VMs exist yet, so there is nothing else this phase can act on.
 
 This phase prepares the **Hyper-V virtual switches** on the host Azure VM. Two switches are needed: one for the host's own internet access, and one (with NAT) for the cluster VMs.
 
@@ -31,7 +33,13 @@ Get-WindowsFeature -Name Hyper-V | Format-Table Name, InstallState
 Get-NetAdapter | Format-Table Name, InterfaceDescription, Status, LinkSpeed
 ```
 
-You should see at least one physical NIC (the host's own connection). On Azure VMs this is usually called `Ethernet` with description `Microsoft Hyper-V Network Adapter`.
+You should see at least one physical NIC (the host's own connection). On Azure VMs this is usually called `Ethernet` with description `Microsoft Hyper-V Network Adapter`. Expected shape of the output:
+
+```
+Name      InterfaceDescription                  Status  LinkSpeed
+----      --------------------                  ------  ---------
+Ethernet  Microsoft Hyper-V Network Adapter     Up      50 Gbps
+```
 
 ## Step 1: Create the External switch
 
@@ -87,11 +95,24 @@ Get-NetIPAddress -InterfaceAlias "vEthernet (Internal)" -AddressFamily IPv4
 Get-NetNat
 ```
 
-Expected output:
-- `External` switch with `SwitchType: External` and the physical NIC description
-- `Internal` switch with `SwitchType: Internal`
-- `192.168.44.1/24` on `vEthernet (Internal)`
-- `HCINAT` with `InternalIPInterfaceAddressPrefix: 192.168.44.0/24`
+Expected output (rough shape):
+
+```
+Name      SwitchType  NetAdapterInterfaceDescription
+----      ----------  ------------------------------
+External  External    Microsoft Hyper-V Network Adapter
+Internal  Internal
+
+IPAddress      InterfaceAlias        PrefixLength
+---------      --------------        ------------
+192.168.44.1   vEthernet (Internal)  24
+
+Name    InternalIPInterfaceAddressPrefix
+----    --------------------------------
+HCINAT  192.168.44.0/24
+```
+
+If your output differs (missing switch, wrong IP, NetNat absent), do not move on — re-run the step that built that artifact.
 
 ## Common pitfalls
 

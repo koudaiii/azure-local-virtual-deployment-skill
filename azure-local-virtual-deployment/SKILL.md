@@ -20,7 +20,7 @@ This skill is **NOT** for production Azure Local deployment on physical hardware
 
 Before starting, confirm:
 
-- A running **Azure VM with nested virtualization enabled** (Standard_E16s_v5 or larger recommended — needs >= 64 GB RAM, 16+ vCPUs)
+- A running **Azure VM with nested virtualization enabled** (`Standard_E32-8s_v5` recommended — 8 vCPUs / 256 GiB RAM; the constrained-core variant of E32s v5 keeps full memory while reducing per-core licensing costs, and was validated end-to-end for this walkthrough)
 - The user has **Owner or Contributor + User Access Administrator** on an Azure subscription
 - A **Windows Server ISO** (2022 or 2025) for the Domain Controller VM
 - **At least 3-4 hours** of available time for the full walkthrough
@@ -30,17 +30,21 @@ Before starting, confirm:
 
 This deployment has 5 phases. Each has a dedicated reference file with detailed commands.
 
-| Phase | What happens | Reference | Approx. time |
-|---|---|---|---|
-| 1 | Host networking (External + Internal switches + NAT) | `references/01-networking-host.md` | 15 min |
-| 2 | Node VM creation, OS install, NIC config, Hyper-V role | `references/02-node-vm.md` | 60-90 min |
-| 3 | Azure side: resource providers, RG, role assignments | `references/03-azure-prep.md` | 15 min |
-| 4 | Register Node with Azure Arc | `references/04-arc-registration.md` | 15 min |
-| 5A | Domain Controller VM + AD DS + DNS | `references/05-ad-setup.md` (part 1) | 45 min |
-| 5B | OU + LCM user via `AsHciADArtifactsPreCreationTool` | `references/05-ad-setup.md` (part 2) | 10 min |
-| 5C | Azure portal cluster deploy wizard | `references/06-cluster-portal.md` | 30 min input + 2 hour deploy |
+The **"Where you act"** column says which machine/identity is in control at that phase — this matters because the same `Administrator` username means a different account in three different places (see `references/00-accounts-and-context.md`).
+
+| Phase | What happens | Where you act | Reference | Approx. time |
+|---|---|---|---|---|
+| 1 | Host networking (External + Internal switches + NAT) | Host Azure VM (`azureuser`) | `references/01-networking-host.md` | 15 min |
+| 2 | Node VM creation, OS install, NIC config, Hyper-V role | Host → console of Node1 → host PSDirect (`$cred`) | `references/02-node-vm.md` | 60-90 min |
+| 3 | Azure side: resource providers, RG, role assignments | Host PowerShell + Azure portal browser | `references/03-azure-prep.md` | 15 min |
+| 4 | Register Node with Azure Arc | Host PSDirect into Node1 (`$cred`) | `references/04-arc-registration.md` | 15 min |
+| 5A | Domain Controller VM + AD DS + DNS | Host → console of DC VM → host PSDirect (`$dcCred`) | `references/05-ad-setup.md` (part 1) | 45 min |
+| 5B | OU + LCM user via `AsHciADArtifactsPreCreationTool` | Host PSDirect into DC (`$dcCred`) — defines `$lcmCred` | `references/05-ad-setup.md` (part 2) | 10 min |
+| 5C | Azure portal cluster deploy wizard | Azure portal browser (signed in as Azure user) | `references/06-cluster-portal.md` | 30 min input + 2 hour deploy |
 
 **Total: 4-5 hours** (much of it waiting on automated processes).
+
+⚠️ **Phases 2, 4, 5A, 5B all involve switching between the host, a VM console, and PowerShell Direct sessions.** Before running any command, confirm which layer you're on — see `references/00-accounts-and-context.md` for the 3-Administrator map and a one-liner that tells you "am I on host / Node1 / DC?".
 
 For errors and gotchas, always consult `references/troubleshooting.md`.
 
@@ -121,6 +125,36 @@ This deployment is **half PowerShell, half Azure portal GUI**. For any portal-dr
 - If a screenshot reveals something unexpected (wrong switch, APIPA address, an error banner), name it immediately and switch to `references/troubleshooting.md`.
 
 The goal is a collaborative build: the user acts and observes, shares what they see, and the skill confirms and guides the next step — never a blind sequence of commands.
+
+### 4. Always show the user where they are and what they're about to see
+
+This deployment crosses **three independent OS layers** (host Azure VM → Node1 nested VM → ActiveDirectory nested VM) and four credential variables (`azureuser` on the host, `$cred`, `$dcCred`, `$lcmCred`). The same username `Administrator` exists in three of those places and means three different accounts. Users get lost easily, so before every interactive step:
+
+- **Surface the current-layer badge.** State explicitly which machine the next command runs on, and which credential variable it uses. Example: `[Host PowerShell — running as azureuser]` or `[Inside Node1 via $cred — Administrator of Node1]`. The shared map in `references/00-accounts-and-context.md` is the canonical reference; point the user there whenever they sound unsure which Administrator is which.
+- **Preview what they will see.** Before any GUI prompt (`Get-Credential`, Windows Server installer, SConfig, Azure portal blade, deployment wizard tab), include a short ASCII mockup that shows the dialog's structure and exactly what to type. Users who know what window is about to appear catch wrong-window mistakes (e.g., typing Node1's Administrator password into the DC credential dialog) before they happen.
+- **Name the trigger.** Say which command opens that window and what closes it (e.g., "running `Get-Credential` opens the dialog below; click OK to return to PowerShell").
+- **After interactive steps, confirm what landed.** If the user types into a dialog, immediately follow with a read-only check that proves the right credential / value was captured (`$cred.UserName`, `Get-VM`, etc.) before continuing.
+
+Example pattern:
+```
+[Host PowerShell — running as azureuser]
+
+About to capture Node1's local Administrator into $cred. You will see this dialog:
+
+  ┌─────────────────────────────────────────────────┐
+  │ Windows PowerShell credential request           │
+  │                                                 │
+  │ User name: [ Administrator              ]       │
+  │ Password:  [ ********************       ]       │
+  │                                                 │
+  │            [ OK ]  [ Cancel ]                   │
+  └─────────────────────────────────────────────────┘
+
+→ User name MUST be just "Administrator" (no domain prefix — Node1 is
+  not domain-joined yet). Password is the one set during Phase 2 OS install.
+```
+
+Mockups do not need to be pixel-accurate — they just need to communicate "which window, which fields, which value goes where".
 
 ## Cost awareness
 

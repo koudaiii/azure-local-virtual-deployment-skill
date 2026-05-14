@@ -4,7 +4,17 @@
 >
 > The procedure below captures the 13 required resource providers and the 6 role assignments (2 subscription-level + 4 resource-group-level) in a single PowerShell flow.
 >
-> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. The role-assignment steps are GUI-driven — actively invite the user to share Azure portal screenshots so you can confirm each assignment landed.
+> **Teaching reminder**: Apply the four teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares, (4) state which layer/credential each command runs as and preview any dialog before it appears. See `references/00-accounts-and-context.md`. The role-assignment steps are GUI-driven — actively invite the user to share Azure portal screenshots so you can confirm each assignment landed.
+
+> **Context shifts in this phase**:
+>
+> | Steps | Where you act |
+> |---|---|
+> | 1–3 (RP registration, RG) | `[Host PowerShell — azureuser]` + browser device-code login |
+> | 4 (role assignments) | `[Azure portal — signed in as your Azure user]` |
+> | 5 (verify) | `[Host PowerShell — azureuser]` |
+>
+> Note: the Azure user you sign into the portal as is the **same identity** as the device-code login in Step 1, NOT `azureuser` on the host VM. `azureuser` is just a local OS account on the Azure VM — it has no relationship to Azure RBAC.
 
 This phase is **entirely on the host's PowerShell** (no Node interaction). You register the 13 required resource providers, create the resource group, and assign roles needed for cluster deployment.
 
@@ -32,8 +42,40 @@ Azure Subscription
 
 ## Step 1: Sign in to Azure
 
+`[Host PowerShell — azureuser]`
+
 ```powershell
 Connect-AzAccount
+```
+
+Expected output — a device-code instruction in the terminal:
+
+```
+WARNING: To sign in, use a web browser to open the page
+         https://microsoft.com/devicelogin and enter the code ABCD-EFGH
+         to authenticate.
+```
+
+Open `https://microsoft.com/devicelogin` (in any browser — easiest from the host's own Edge), paste the code, and sign in with the Azure user that has Owner / Contributor + User Access Administrator on the target subscription. That dialog looks like:
+
+```
+┌─ Sign in to your account ───────────────────────────────────────┐
+│ Microsoft                                                       │
+│                                                                 │
+│ Enter code                                                      │
+│                                                                 │
+│ Code:  [ ABCD-EFGH                            ]                 │
+│                                                                 │
+│                                       [ Next ]                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Back in PowerShell after the browser flow completes, you should see your account printed:
+
+```
+Account               SubscriptionName   TenantId      Environment
+-------               ----------------   --------      -----------
+you@contoso.com       MyAzureSub         <guid>        AzureCloud
 ```
 
 If multiple subscriptions exist, set the right one:
@@ -104,7 +146,46 @@ if (-not $existingRG) {
 
 ## Step 4: Assign roles (Azure portal recommended)
 
+`[Azure portal — signed in as your Azure user]`
+
 Role assignment via portal is more reliable than PowerShell, especially for multi-step assignments. From the [Azure portal](https://portal.azure.com):
+
+The IAM blade you'll be working in looks like this — `+ Add` opens a 4-step "Add role assignment" wizard:
+
+```
+┌─ Access control (IAM)  —  azurelocalconnected ────────────────────┐
+│ + Add ▼  ↓ Download  ⟳ Refresh  ? Got feedback                    │
+│ ┌─────────────────────────────────────────────────────────────┐   │
+│ │ Add role assignment     ← click this entry from the + Add   │   │
+│ │ Add co-administrator      menu                              │   │
+│ │ Add deny assignment                                         │   │
+│ └─────────────────────────────────────────────────────────────┘   │
+│                                                                   │
+│ [ Check access ] [ Role assignments ] [ Roles ] [ Deny assign… ]  │
+│                                                                   │
+│  Showing 12 of 28 role assignments…                               │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+The wizard itself is a 4-tab flow — for each role assignment you'll touch tabs **Role → Members → Review + assign**:
+
+```
+┌─ Add role assignment ─────────────────────────────────────────────┐
+│ Role  >  Members  >  Conditions  >  Review + assign               │
+│                                                                   │
+│ Search:  [ Key Vault Contributor                          ] 🔍    │
+│                                                                   │
+│ ◉ Key Vault Contributor                                           │
+│ ○ Key Vault Secrets Officer                                       │
+│ ○ Key Vault Data Access Administrator                             │
+│ ○ Storage Account Contributor                                     │
+│ …                                                                 │
+│                                                                   │
+│                                       [ Back ] [ Next > ]         │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+On the **Members** tab, leave "User, group, or service principal" selected and add yourself (the Azure user signed in to the portal — same as Step 1).
 
 ### Subscription-level roles
 
@@ -125,6 +206,8 @@ Role assignment via portal is more reliable than PowerShell, especially for mult
    - **Storage Account Contributor**
 
 ## Step 5: Verify assignments
+
+`[Host PowerShell — azureuser]`
 
 ```powershell
 # Subscription level

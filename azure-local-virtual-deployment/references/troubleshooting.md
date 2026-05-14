@@ -4,8 +4,93 @@
 > - [Get support for deployment issues](https://learn.microsoft.com/en-us/azure/azure-local/manage/get-support-for-deployment-issues) — official support escalation path and log collection
 > - [Troubleshoot Azure Local deployment](https://learn.microsoft.com/en-us/azure/azure-local/manage/troubleshoot-deployment-issues) — known issues from Microsoft
 > - [Azure Local known issues](https://learn.microsoft.com/en-us/azure/azure-local/known-issues) — current release-specific issues
+> - [Hyper-V event logs reference](https://raw.githubusercontent.com/MicrosoftDocs/windowsserverdocs/main/WindowsServerDocs/virtualization/hyper-v/manage/Manage-Hyper-V-integration-services.md) — for hypervisor-layer symptoms below
 
 This is the place to look when something goes wrong. Errors are grouped by phase.
+
+## First-line Hyper-V diagnostics (use *before* the phase-specific sections below)
+
+Most Phase 2 / 5 problems present as "the VM won't start", "PowerShell Direct keeps rejecting credentials", or "the console screen is black". These are usually Hyper-V-layer symptoms, not Azure Local symptoms — so the fastest first move is to read what Hyper-V itself recorded about the VM. Run these from the **host** before diving into the phase-specific entries.
+
+### Step 1: What does Hyper-V think the VM is doing?
+
+`[Host PowerShell — azureuser]`
+
+```powershell
+# Full VM state including notes and last status
+Get-VM -Name "Node1" | Format-List Name, State, Status, Uptime, Heartbeat, Notes,
+    ProcessorCount, MemoryAssigned, AutomaticStartAction, CheckpointType
+
+# Was the VM running when it failed? Any obvious blocker?
+Get-VM -Name "Node1" | Select-Object Name, State, OperationalStatus, PrimaryStatusDescription
+```
+
+If `State` is `Off`, the VM never started. If `Status` shows `Operating normally` but you cannot reach it via PSDirect, the *guest OS* is the problem, not Hyper-V.
+
+### Step 2: Hyper-V Worker — why a VM failed to start
+
+The **Hyper-V-Worker-Admin** log is the single most useful log when a VM refuses to power on. One worker process per running VM; if start-up fails, the cause is here:
+
+```powershell
+Get-WinEvent -FilterHashTable @{
+    LogName = "Microsoft-Windows-Hyper-V-Worker-Admin"
+} -MaxEvents 20 | Format-Table TimeCreated, Id, LevelDisplayName, Message -Wrap
+```
+
+Common message patterns and what they mean:
+
+| Message contains… | Likely cause |
+|---|---|
+| `failed to power on with Error 'General access denied error'` | Host has Defender or another agent locking the VHDX file — close anything else that has the file open, then retry |
+| `Key Protector could not be unwrapped` | vTPM key protector lost (Phase 2 Step 4) — re-run `Set-VMKeyProtector` |
+| `'Node1' could not initialize. Synthetic SCSI Controller…` | A VHDX is missing or its path moved — check `Get-VMHardDiskDrive -VMName Node1` |
+| `Cannot load a virtual machine configuration: 0x80070002` | `.vmcx` file moved or corrupted — restore from the VM's `Virtual Machines\` folder |
+
+### Step 3: Hypervisor — host-level capability issues
+
+The **Hyper-V-Hypervisor** log records whether the host itself can run VMs at all. This matters in a nested-virt setup because **the Azure VM's nested-virt capability is what makes any of this possible**:
+
+```powershell
+Get-WinEvent -FilterHashTable @{
+    LogName = "Microsoft-Windows-Hyper-V-Hypervisor-Admin"
+} -MaxEvents 10 | Format-Table TimeCreated, Id, LevelDisplayName, Message -Wrap
+```
+
+If you see errors like `Hyper-V launch failed; CPU does not support virtualization`, the host Azure VM was created without nested virtualization (wrong SKU or feature) — see SKILL Prerequisites. No amount of in-guest tweaking will fix this; the VM size has to change.
+
+### Step 4: VMMS — broader service / configuration errors
+
+The **Hyper-V Virtual Machine Management service (VMMS)** logs cover the Hyper-V management plane (anything `Get-VM` / `Set-VM` does goes through here):
+
+```powershell
+Get-WinEvent -FilterHashTable @{
+    LogName = "Microsoft-Windows-Hyper-V-VMMS-Admin"
+} -MaxEvents 20 | Format-Table TimeCreated, Id, LevelDisplayName, Message -Wrap
+```
+
+Useful for diagnosing failures in `New-VMSwitch`, `Connect-VMNetworkAdapter`, and credential-store / PowerShell Direct issues.
+
+### Step 5: One-liner for "give me everything from the last hour"
+
+When you do not yet know which log holds the answer, sweep all three:
+
+```powershell
+$since = (Get-Date).AddHours(-1)
+@(
+    "Microsoft-Windows-Hyper-V-Worker-Admin",
+    "Microsoft-Windows-Hyper-V-Hypervisor-Admin",
+    "Microsoft-Windows-Hyper-V-VMMS-Admin"
+) | ForEach-Object {
+    Get-WinEvent -FilterHashTable @{LogName = $_; StartTime = $since} -ErrorAction SilentlyContinue |
+        Where-Object { $_.LevelDisplayName -in 'Error', 'Warning' } |
+        Select-Object @{N='Log';E={($_.LogName -split '/')[0] -replace '^Microsoft-Windows-Hyper-V-',''}},
+                       TimeCreated, Id, LevelDisplayName, Message
+} | Format-Table -Wrap -AutoSize
+```
+
+This is the fastest way to see whether the failure point is the **VM** (Worker), the **host** (Hypervisor), or the **management layer** (VMMS), and to route to the right phase-specific entry below.
+
+> **Reference**: for the full list of Hyper-V event channels and what each one logs, see `learn.microsoft.com/en-us/powershell/module/hyper-v/` and the Hyper-V hyper-v-expert reference under `manage/`.
 
 ## Phase 1: Host Networking
 
@@ -76,6 +161,7 @@ Set-VMKeyProtector -VMName "Node1" -KeyProtector $kp.RawData
    Restart-VM -Name "Node1" -Force
    ```
    PowerShell Direct's credential broker can get into a bad state after network configuration changes (especially switch swaps). A restart fixes it.
+3. If the failure persists across restarts, the cause is usually NOT credentials — check the VMMS log via the **First-line Hyper-V diagnostics § Step 4** at the top of this file. PSDirect goes through VMMS, so authentication-broker errors land there before they surface in PowerShell.
 
 ### `Test-NetConnection` to internet fails
 

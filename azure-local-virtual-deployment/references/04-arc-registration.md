@@ -4,7 +4,17 @@
 >
 > Multiple variants exist in the doc based on proxy/gateway combinations. This skill uses the **without-proxy, without-Arc-gateway, ARM-token** variant — the cleanest path for a nested-VM lab where the host is already signed into Azure.
 >
-> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. The "before" here is "no Node in the resource group"; the "after" is the Arc machine resource appearing — confirm both explicitly.
+> **Teaching reminder**: Apply the four teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares, (4) state which layer/credential each command runs as and preview any dialog before it appears. See `references/00-accounts-and-context.md`. The "before" here is "no Node in the resource group"; the "after" is the Arc machine resource appearing — confirm both explicitly.
+
+> **Context shifts in this phase**:
+>
+> | Steps | Where you act |
+> |---|---|
+> | 1 (cmdlet probe) | `[Host PowerShell → Node1 via $cred]` |
+> | 2 (ARM token) | `[Host PowerShell — azureuser]` (uses the host's Azure sign-in from Phase 3) |
+> | 3 (bootstrap) | `[Host PowerShell → Node1 via $cred]` — token is passed in |
+> | 4–5 (monitor / recovery) | `[Host PowerShell → Node1 via $cred]` |
+> | 6 (verify) | `[Host PowerShell — azureuser]` + `[Azure portal]` |
 
 This phase runs the **Azure Local bootstrap** on Node1 to register it as an Arc-enabled machine. After this, Azure can see the Node and you can run the cluster deployment wizard.
 
@@ -155,6 +165,26 @@ In the Azure portal:
 1. Resource group `azurelocalconnected` → `Node1`
 2. **Status**: `Connected` (green)
 3. **Last seen**: within last few minutes
+
+The portal blade should look approximately like this:
+
+```
+┌─ Node1  |  Machine - Azure Arc ───────────────────────────────────┐
+│ ⟳ Refresh  ✎ Edit  ⌫ Delete  + Tags                              │
+├───────────────────────────────────────────────────────────────────┤
+│  Essentials                                                       │
+│  Resource group     :  azurelocalconnected                        │
+│  Location           :  Japan East                                 │
+│  Subscription       :  MyAzureSub                                 │
+│  OS                 :  Azure Stack HCI                            │
+│  Status             :  ● Connected            ← green dot         │
+│  Last seen          :  Just now                                   │
+│  Computer name      :  Node1                                      │
+│  Azure Arc agent    :  1.x.x                                      │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+If `Status` shows `Disconnected` or `Expired`, do not move on — re-run Step 5 to inspect the bootstrap state.
 
 ## Common failures
 

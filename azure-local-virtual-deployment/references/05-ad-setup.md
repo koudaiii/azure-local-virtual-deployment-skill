@@ -4,7 +4,31 @@
 >
 > The official doc assumes an existing AD domain. This skill adds Part A (building a Domain Controller VM from scratch on the Internal switch) since lab environments rarely have a pre-existing domain.
 >
-> **Teaching reminder**: Apply the three teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares. This phase has the most before/after-critical steps in the whole skill (switch swap, static IP, DNS repoint) — bookend every one of them with checks.
+> **Teaching reminder**: Apply the four teaching principles from `SKILL.md` — (1) show before/after state for every change, (2) point the user at the source doc above, (3) accept screenshots and links the user shares, (4) state which layer/credential each command runs as and preview any dialog before it appears. See `references/00-accounts-and-context.md`. This phase has the most before/after-critical steps in the whole skill (switch swap, static IP, DNS repoint) and introduces **two new credential variables** (`$dcCred`, `$lcmCred`) — bookend every step with checks and confirm the right credential is being used each time.
+
+> ⚠ **Three Administrators are now in play.** Open `references/00-accounts-and-context.md` side-by-side. The Get-Credential dialog and the username `Administrator` will appear several times in this phase, and they refer to **different accounts** each time.
+>
+> Quick recap for this phase:
+>
+> ```
+> azureuser           = local OS account on the host Azure VM (RDP login)
+> $cred               = Node1 local Administrator (set in Phase 2)
+> $dcCred  ← NEW      = DC VM Administrator (becomes Domain Admin of azurelocal.com)
+> $lcmCred ← NEW      = lcmuser, the AD domain user the cluster wizard will use
+> ```
+>
+> **Context shifts in this phase**:
+>
+> | Steps | Where you act |
+> |---|---|
+> | A1 (build DC VM) | `[Host PowerShell — azureuser]` |
+> | A2 (Windows install) | `[Inside DC console]` via `vmconnect` |
+> | A3 (install AD DS) | `[Inside DC console]` — opens PowerShell as Admin inside the DC |
+> | B1 (verify switch) | `[Host PowerShell — azureuser]` |
+> | B2 (capture `$dcCred`) | `[Host PowerShell — azureuser]` — `Get-Credential` dialog appears |
+> | B3–B5 (IP, DNS, Node DNS) | `[Host PowerShell → DC via $dcCred]` and `[Host PowerShell → Node1 via $cred]` |
+> | C1–C3 (OU + lcmuser) | `[Host PowerShell → DC via $dcCred]` — `Get-Credential` for `$lcmCred` appears on the host |
+> | C4 (reset LCM pwd, if needed) | `[Host PowerShell — azureuser]` + `[Host PowerShell → DC via $dcCred]` |
 
 Azure Local **requires an Active Directory domain** for the cluster, even in a lab. This phase creates a Domain Controller VM, sets up DNS, and pre-creates the OU and LCM (Lifecycle Manager) user that the cluster deployment will use.
 
@@ -63,15 +87,34 @@ vmconnect.exe localhost ActiveDirectory
 
 ### Step A2: Install Windows Server (via console)
 
+`[Inside DC console]` — all interaction in this step happens in the vmconnect window that opens from `vmconnect.exe localhost ActiveDirectory` in Step A1.
+
 Standard Windows Server install:
 1. Choose **Windows Server 2022/2025 Standard (Desktop Experience)** or Datacenter
 2. Custom install on the 60 GB disk
-3. Set Administrator password
-4. After install, log in to the desktop
+3. Set Administrator password. The "Customize settings" prompt looks like:
+
+   ```
+   ┌─ DC console — Customize settings ───────────────────────────────┐
+   │                                                                 │
+   │ Type a password for the built-in administrator account that     │
+   │ you can use to sign in to this computer.                        │
+   │                                                                 │
+   │ Password:          [ ********************              ]        │
+   │ Reenter password:  [ ********************              ]        │
+   │                                                                 │
+   │ → 14+ chars recommended. This is the DC VM's local Admin,       │
+   │   which becomes Domain Admin of azurelocal.com after Step A3.   │
+   │   Captured into $dcCred in Step B2.                             │
+   │                                                                 │
+   │                                                  [ Finish ]     │
+   └─────────────────────────────────────────────────────────────────┘
+   ```
+4. After install, sign in to the desktop with the password you just set.
 
 ### Step A3: Install AD DS and promote to DC (inside the DC VM)
 
-Open PowerShell as Administrator **inside the DC VM** and run:
+`[Inside DC console]` — open an elevated PowerShell *inside the DC VM* (Start → right-click PowerShell → Run as Administrator). Do **not** run these in the host's PowerShell window — they must execute on the DC itself.
 
 ```powershell
 # Install AD DS
@@ -119,16 +162,47 @@ Restart-VM -Name "ActiveDirectory" -Force
 
 ### Step B2: Connect to DC via PowerShell Direct
 
-```powershell
-# On host
-$dcCred = Get-Credential   # User: Administrator (Domain Admin), Password from Step A2
+`[Host PowerShell — azureuser]`
 
-Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock { hostname }
+```powershell
+$dcCred = Get-Credential
 ```
 
-If credential fails, try: `azurelocal\Administrator`, `.\Administrator`, or `Administrator@azurelocal.com`.
+The credential dialog that appears here looks identical to the one used for `$cred`, but it is a **different account** — the DC VM's Administrator, which became the Domain Admin of `azurelocal.com` after `Install-ADDSForest` ran. Do **not** type Node1's password here.
+
+```
+┌─ Windows PowerShell credential request ─────────────────────────┐
+│                                                                 │
+│ DC VM Administrator (now Domain Admin of azurelocal.com)        │
+│                                                                 │
+│ User name:  [ Administrator                          ]   ▼     │
+│ Password:   [ ********************                   ]         │
+│                                                                 │
+│                                       [   OK   ]  [ Cancel ]    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- **User name**: `Administrator`. If that fails when used with `Invoke-Command` below, retry with `azurelocal\Administrator`, then `.\Administrator`, then `Administrator@azurelocal.com`.
+- **Password**: the one you set during the Windows Server install in Step A2.
+
+Verify the variable holds the expected account before continuing:
+
+```powershell
+$dcCred.UserName        # → Administrator (or azurelocal\Administrator, etc.)
+```
+
+Then test:
+
+```powershell
+Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock { hostname }
+# Expected: ActiveDirectory
+```
+
+If credential fails, see `references/00-accounts-and-context.md` § "What to do when a credential is rejected".
 
 ### Step B3: Set static IP, gateway, and DNS forwarder
+
+`[Host PowerShell → DC via $dcCred]`
 
 ```powershell
 Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
@@ -154,6 +228,8 @@ Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
 
 ### Step B4: Verify DNS resolution
 
+`[Host PowerShell → DC via $dcCred]`
+
 ```powershell
 Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
     Resolve-DnsName -Name "azurelocal.com" -Type A     # Internal
@@ -164,6 +240,8 @@ Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
 Both should succeed.
 
 ### Step B5: Point Node1's DNS at the DC
+
+`[Host PowerShell → Node1 via $cred]` — note this step jumps **back** to using `$cred` (Node1's credential), not `$dcCred`. The DNS we are updating belongs to Node1.
 
 ```powershell
 Invoke-Command -VMName "Node1" -Credential $cred -ScriptBlock {
@@ -184,6 +262,8 @@ All three should succeed.
 
 ### Step C1: Install the helper module on the DC
 
+`[Host PowerShell → DC via $dcCred]` — back to talking to the DC.
+
 ```powershell
 Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
     # Accept NuGet prompt automatically with -Force
@@ -201,11 +281,32 @@ Expected commands: `New-HciAdObjectsPreCreation`, `Remove-AsHciOU`.
 
 ### Step C2: Create OU and LCM user
 
+`[Host PowerShell — azureuser]` for the Get-Credential, then `[Host PowerShell → DC via $dcCred]` for the AD object creation.
+
 ⚠️ **Password requirement**: The LCM user password must be **14+ chars, with upper/lower/digit/special**. AD's default policy allows 7+ chars, so a too-short password passes `New-HciAdObjectsPreCreation` but later fails in the Azure portal wizard (Phase 6). **Always use 14+ chars.**
+
+`Get-Credential` here creates a **new domain user** — you are not signing in as someone existing, you are *defining* the username and password that will be created inside AD. The dialog looks like:
+
+```
+┌─ Windows PowerShell credential request ─────────────────────────┐
+│                                                                 │
+│ LCM credentials (user: lcmuser, password: 14+ chars)            │
+│                                                                 │
+│ User name:  [ lcmuser                                ]   ▼     │
+│ Password:   [ ********************                   ]         │
+│                                                                 │
+│                                       [   OK   ]  [ Cancel ]    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+- **User name**: literally `lcmuser` (no domain prefix). This becomes a domain user inside `OU=AzureLocal,DC=azurelocal,DC=com`.
+- **Password**: invent a fresh 14+ char password with all 4 character classes. Write it down — you will type it again into the Azure portal wizard in Phase 6 Tab 4 ("Deployment account").
 
 ```powershell
 # Capture LCM credentials (user = "lcmuser", password = 14+ chars, all 4 classes)
 $lcmCred = Get-Credential -Message "LCM credentials (user: lcmuser, password: 14+ chars)"
+
+$lcmCred.UserName       # → lcmuser  (sanity check before running the command below)
 
 Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
     param($lcmCredential)
@@ -225,6 +326,8 @@ VERBOSE: Gpo inheritance blocked for 'OU=AzureLocal,DC=azurelocal,DC=com', inher
 ```
 
 ### Step C3: Verify
+
+`[Host PowerShell → DC via $dcCred]`
 
 ```powershell
 Invoke-Command -VMName "ActiveDirectory" -Credential $dcCred -ScriptBlock {
